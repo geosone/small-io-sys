@@ -12,3 +12,4 @@ windows-*.preinst.conf
 /COMMAND.COM.*
 /MSDOS.SYS.*
 /de/
+/tools/win/
