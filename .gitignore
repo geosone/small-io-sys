@@ -11,3 +11,4 @@ windows-*.preinst.conf
 /upx1l.ndisasm.txt
 /COMMAND.COM.*
 /MSDOS.SYS.*
+/de/

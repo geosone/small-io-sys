@@ -48,7 +48,7 @@ cpu 386  ; Some instructions don't work with `cpu 386'.
 
 OBASE: equ $$+((MSLOAD_PARA_SIZE-0x80)<<4)
 
-%define ORIG_IO_FN 'winboot.98s'
+%include 'lang.inc'  ; Defines ORIG_IO_FN.
 %define MSDCM_FN 'IO.SYS.win98sekb.msdcmc'
 ;%define MSDCM_FN 'asc.exe'  ; !!
 
@@ -301,7 +301,7 @@ print_al_hex:  ; Prints byte in AL as 2 hex digits to the QEMU debug console.
 		ret
 %endif
 
-patch_fofs_ab1 0x54c2, 0x5702, db 0  ; Replace `times 0x90 db 'MPAD'` with NULs, for better compression.
+patch_fofs_ab1 FOFS_MPAD1, 0x5702, db 0  ; Replace the MPADs with NULs, for better compression.
 
 ; C;\logo.sys, if available, still works: wget https://archive.org/download/win95-logo.sys/logo.sys
 ;patch_fofs 0x13ed, dw, 0x0e29, 0xa390  ; Force load_para_count to be 0, effectively ignoring the embedded compressed logo (splash screen). It also makes io.sys ignore the mz_header.hdrsize value after msload has completed.
@@ -362,20 +362,24 @@ read_from_logo_and_decompress:  ; Reads at most 0x8000 uncmpressed logo bytes to
   %endif
 %endif
 
+%ifdef MSDOS71
+  patch_msdos71_texts
+%endif
+
 %ifndef MSDCM  ; Overwrite the MSDCM messages with compressible data.
   %ifdef OPTIMIZE_FOR_COMPRESSION
-		incbin_until_fofs 0x112a5
+		incbin_until_fofs FOFS_MSG_REG
 		db '$'  ; Make the massege empty, since we never display it.
-		times 0x112d3-0x112a5-1 db ' '
-    assert_fofs 0x112d3
-		incbin_until_fofs 0x115ed
+		times FOFS_MSG_REG_END-FOFS_MSG_REG-1 db ' '
+    assert_fofs FOFS_MSG_REG_END
+		incbin_until_fofs FOFS_MSG_DCM
 		db '$'  ; Make the massege empty, since we never display it.
-		times 0x1166d-0x115ed-1 db ' '
-    assert_fofs 0x1166d
+		times FOFS_MSG_DCM_END-FOFS_MSG_DCM-1 db ' '
+    assert_fofs FOFS_MSG_DCM_END
   %endif
 %endif
 
-patch_fofs_ab1 0x11c49, 0x12e51, db 0 ; Replace `times 0x47e db 'MPAD'` with NULs, for better compression.
+patch_fofs_ab1 FOFS_MPAD2, 0x12e51, db 0 ; Replace the MPADs with NULs, for better compression.
 
 ; This is the w3xstart patch, i.e. to make Windows 3.x work under MS-DOS 7.1 (Windows 98). Here are the patches for io.sys:
 ;

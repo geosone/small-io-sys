@@ -133,7 +133,7 @@ cpu 386  ; Some instructions don't work with `cpu 386'.
 ;   -rw-rw-r-- 1 pts pts 222670 2001-12-01 09:37:12.000000000 +0100 winboot.98s
 ;   ```
 ; * `sha256sum winboot.98s`: d34436a7ce911ed39549fce6107f3b55ad5d413565ebabc1398e13f2df103271  winboot.98s
-%define ORIG_IO_FN 'winboot.98s'
+%include 'lang.inc'  ; Defines ORIG_IO_FN.
 
 %macro incbin_until_fofs 1
   %if (%1)<($-OBASE)
@@ -186,17 +186,17 @@ cpu 386  ; Some instructions don't work with `cpu 386'.
 
 mz_header:
 .signature:	db 'MZ'  ; Magic bytes checked by the boot sector code.
-.lastsize:      patch dw, 0x1ce, 0 ; dw (end-.signature) & 0x1ff  ; The value 0 and 0x200 are equivalent here. Microsoft Linker 3.05 generates 0, so do we. Number of bytes in the last 0x200-byte block in the .exe file.
+.lastsize:      patch dw, ORIG_LASTSIZE, 0 ; dw (end-.signature) & 0x1ff  ; The value 0 and 0x200 are equivalent here. Microsoft Linker 3.05 generates 0, so do we. Number of bytes in the last 0x200-byte block in the .exe file.
 .nblocks:       patch dw, 0x1b3, 0 ; dw (end-.signature +0x1ff)>> 9  ; Number of 0x200-byte blocks in .exe file (rounded up).
 .nreloc:	dw 0  ; No relocations. That's always true, even for MSDCM.
 .hdrsize:	patch dw, 0x2e40, 0x1e00+MSLOAD_PARA_SIZE-0x80  ; dw (end-.signature)>>4  ; Used by msload to determine (at least) how many paragraphs of msbio to load, the count includes the msload in the beginning, even though it is not loaded.
 .minalloc:	patch dw, 0x362, 0  ; 0x11
 .maxalloc:	patch dw, -1, 0  ; -1
-.ss:		patch dw, 0x838, 0  ; 0x6cf
+.ss:		patch dw, ORIG_SS, 0  ; 0x6cf
 .sp:		patch dw, 0x80, 0  ; 0x80
 .checksum:	dw 0
 .ip:		patch dw, 0x10, 0
-.cs:		patch dw, 0x7f6, 0
+.cs:		patch dw, ORIG_CS, 0
 %ifndef NOPATCH
 assert_hfofs 0x18
 %if MSLOAD_PARA_SIZE==0x34
@@ -386,7 +386,7 @@ patch_fofs 0x13ed, dw, 0x0e29, 0xa390  ; Force load_para_count to be 0, effectiv
 		incbin_until_fofs 0x503d
 disablelog:	db OPTVAL_DisableLog+(~OPTVAL_DisableLog&2)  ; 0 --> 2; 1 --> 1. Based on http://forum.ru-board.com/topic.cgi?forum=62&topic=31453&start=300#9
 
-patch_fofs_ab1 0x54c2, 0x5702, db 0  ; Replace `times 0x90 db 'MPAD'` with NULs, for better compression.
+patch_fofs_ab1 FOFS_MPAD1, 0x5702, db 0  ; Replace the MPADs with NULs, for better compression.
 
 		incbin_until_fofs 0x6e67
 %ifndef NOPATCH
@@ -445,27 +445,30 @@ patch_fofs_ab_cli_hlt 0x1052e, 0x10552
 patch_fofs_ab_cli_hlt 0x1064d, 0x10844  ; Overwrite MSDCM-related code with useless instructions.
 %endif
 
-%if 1  ; Overwrite the MSDCM messages with compressible data.
-		incbin_until_fofs 0x112a5
-%ifndef NOPATCH
-		db '$'  ; Make the massege empty, since we never display it.
-		times 0x112d3-0x112a5-1 db ' '
-%else
-		db 'Process the system registry [Enter=Y,Esc=N]?$', 0
-%endif	
-assert_fofs 0x112d3
-		incbin_until_fofs 0x115ed
-%ifndef NOPATCH
-		db '$'  ; Make the massege empty, since we never display it.
-		times 0x1166d-0x115ed-1 db ' '
-%else
-		db 'Warning: the system configuration manager failed to run.', 13, 10
-		db 'Some of your real-mode device drivers may not initialize properly.', 13, 10, '$', 0  ; MSDCM EXEC error message.
-%endif
-assert_fofs 0x1166d
+%ifdef MSDOS71
+patch_msdos71_texts
 %endif
 
-patch_fofs_ab1 0x11c49, 0x12e51, db 0 ; Replace `times 0x47e db 'MPAD'` with NULs, for better compression.
+%if 1  ; Overwrite the MSDCM messages with compressible data.
+		incbin_until_fofs FOFS_MSG_REG
+%ifndef NOPATCH
+		db '$'  ; Make the massege empty, since we never display it.
+		times FOFS_MSG_REG_END-FOFS_MSG_REG-1 db ' '
+%else
+		incbin_until_fofs FOFS_MSG_REG_END  ; 'Process the system registry [Enter=Y,Esc=N]?$', 0
+%endif	
+assert_fofs FOFS_MSG_REG_END
+		incbin_until_fofs FOFS_MSG_DCM
+%ifndef NOPATCH
+		db '$'  ; Make the massege empty, since we never display it.
+		times FOFS_MSG_DCM_END-FOFS_MSG_DCM-1 db ' '
+%else
+		incbin_until_fofs FOFS_MSG_DCM_END  ; MSDCM EXEC error message: 'Warning: the system configuration manager failed to run.', ...
+%endif
+assert_fofs FOFS_MSG_DCM_END
+%endif
+
+patch_fofs_ab1 FOFS_MPAD2, 0x12e51, db 0 ; Replace the MPADs with NULs, for better compression.
 
 ; This is the w3xstart patch, i.e. to make Windows 3.x work under MS-DOS 7.1 (Windows 98). Here are the patches for io.sys:
 ;
@@ -522,5 +525,5 @@ incbin_until_fofs 0x1e000
   %endif
 %else
   incbin ORIG_IO_FN, $-OBASE
-  assert_fofs 0x365ce  ; Check size. sha256sum is: d34436a7ce911ed39549fce6107f3b55ad5d413565ebabc1398e13f2df103271  winboot.98s
+  assert_fofs FOFS_EOF  ; Check size.
 %endif
