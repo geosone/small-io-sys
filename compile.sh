@@ -16,8 +16,8 @@ set -ex
 
 # With the argument `de', build the German io.sys in the directory de/, from
 # winboot.sys of the German Windows 98 SE CD. Copy WIN98\PRECOPY1.CAB and
-# WIN98\PRECOPY2.CAB of the CD (or winboot.sys from them) to de/ first. A
-# COMMAND.COM in de/ is added to the floppy disk image.
+# WIN98\PRECOPY2.CAB of the CD (or winboot.sys and command.com from them) to
+# de/ first.
 if test "$1" = de; then
   lang=de; shift; test -d de || mkdir de; cd de; t=../
 else
@@ -39,7 +39,9 @@ unexepack=${t}tools/pts-unexepack-v1.upx
 # * https://web.archive.org/web/20020204073516/http://download.microsoft.com/download/win98/patch/22527/w98/en-us/311561usa8.exe  (contains the patched io.sys of KB311561)
 if test "$lang" = de; then
   test -f winboot.sys || "$cabextract" -q -F winboot.sys PRECOPY1.CAB
+  test -f command.com || "$cabextract" -q -F command.com PRECOPY1.CAB
   test "$(sha256sum winboot.sys)" = "33c946c67780f0da704128c72b733d1fc0e36132d7a7944ef2d18d635d4545b8  winboot.sys"
+  test "$(sha256sum command.com)" = "47a37d865c601a9058a73f16816bb26b77b18881a2ee395290eca1d423e9dfae  command.com"
   "$nasm" -O0 -w+orphan-labels -f bin -o winboot.98d ${t}kb311561de.nasm
   test "$(sha256sum winboot.98d)" = "fa2fe238ffcb30aae852a7bedae6845d55c798fec4426059e59fb540714037e6  winboot.98d"
   orig=winboot.98d
@@ -133,11 +135,7 @@ cmp "$orig" IO.SYS.win98sekb
 #"$mtools" -c mcopy -bsomp -i fd.img winboot.98s ::IO.SYS
 "$mtools" -c mcopy -bsomp -i fd.img IO.SYS.win98sekbpc ::IO.SYS
 "$mtools" -c mattrib -i fd.img +s ::IO.SYS
-if test "$lang" = de; then
-  test -f COMMAND.COM && "$mtools" -c mcopy -bsomp -i fd.img COMMAND.COM ::COMMAND.COM
-else
-  "$mtools" -c mcopy -bsomp -i fd.img command.com ::COMMAND.COM
-fi
+"$mtools" -c mcopy -bsomp -i fd.img command.com ::COMMAND.COM
 
 : qemu-system-i386 -M pc-1.0 -m 2 -nodefaults -vga cirrus -drive file=fd.img,format=raw,if=floppy -boot a
 
